@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cyber-Link HUD v4.0</title>
+  <style>
+    body { font-family: 'Courier New', monospace; margin: 0; background: #000; overflow: hidden; color: #0f0; }
+    #video-container { position: relative; width: 100vw; height: 100vh; }
+    video { width: 100%; height: 100%; object-fit: cover; filter: brightness(0.5) contrast(1.5) hue-rotate(90deg); }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    
+    /* サイドパネルUI */
+    .side-panel {
+      position: absolute; top: 20px; left: 20px; font-size: 10px;
+      line-height: 1.2; pointer-events: none; border-left: 2px solid #0f0; padding-left: 10px;
+      animation: blink 0.1s infinite opacity;
+    }
+    .glitch-text { animation: glitch 2s infinite; }
+    @keyframes glitch {
+      0% { transform: translate(0); }
+      2% { transform: translate(-2px, 1px); }
+      4% { transform: translate(2px, -1px); }
+      100% { transform: translate(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="video-container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+    <div class="side-panel">
+      <div class="glitch-text">v4.0 // CONNECTED</div>
+      <div>CORE_TEMP: 42°C</div>
+      <div>NET_ACCESS: ENCRYPTED</div>
+      <div id="binary-stream"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2"></script>
+
+  <script type="module">
+    import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2";
+
+    const video = document.getElementById("webcam");
+    const canvasElement = document.getElementById("output_canvas");
+    const canvasCtx = canvasElement.getContext("2d");
+    const binaryStream = document.getElementById("binary-stream");
+    let objectDetector;
+
+    // カッコいい偽データのリスト
+    const cyberTerms = [
+      "DECODING_HASH...", "STRUCT_ANALYSIS", "ENCRYPTED_STREAM", 
+      "VITAL_SIGN: OK", "LATENCY: 12ms", "TRACING_IP...", 
+      "TARGET_LOCKED", "DNA_SEQUENCE: UNKNOWN"
+    ];
+
+    async function init() {
+      const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2/wasm");
+      objectDetector = await ObjectDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite`,
+          delegate: "GPU"
+        },
+        scoreThreshold: 0.4,
+        runningMode: "VIDEO"
+      });
+      startCamera();
+    }
+
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+      video.addEventListener("loadeddata", predict);
+    }
+
+    function drawCyberUI(x, y, w, h, label) {
+      canvasCtx.strokeStyle = "#0f0";
+      canvasCtx.lineWidth = 1;
+
+      // 1. デザイン枠
+      canvasCtx.beginPath();
+      canvasCtx.rect(x, y, w, h);
+      canvasCtx.moveTo(x, y + h/2); canvasCtx.lineTo(x - 10, y + h/2); // 横のヒゲ
+      canvasCtx.stroke();
+
+      // 2. 高速で変わるハッシュ値
+      const hash = Math.random().toString(36).substring(2, 10).toUpperCase();
+      canvasCtx.fillStyle = "#0f0";
+      canvasCtx.font = "9px monospace";
+      canvasCtx.fillText(`SIG: 0x${hash}`, x, y - 5);
+
+      // 3. サイドのステータス
+      const term = cyberTerms[Math.floor(Date.now() / 500) % cyberTerms.length];
+      canvasCtx.fillText(`> ${label.toUpperCase()}`, x + w + 5, y + 10);
+      canvasCtx.fillText(`> ${term}`, x + w + 5, y + 22);
+      
+      // 4. バーグラフ演出
+      const barW = Math.random() * 50;
+      canvasCtx.globalAlpha = 0.5;
+      canvasCtx.fillRect(x + w + 5, y + 30, barW, 4);
+      canvasCtx.globalAlpha = 1.0;
+    }
+
+    async function predict() {
+      canvasElement.width = video.videoWidth;
+      canvasElement.height = video.videoHeight;
+      const results = await objectDetector.detectForVideo(video, performance.now());
+      
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      
+      // 背景のバイナリ更新
+      binaryStream.innerText = Math.random().toString(2).substring(2, 12);
+
+      results.detections.forEach(det => {
+        const { originX, originY, width, height } = det.boundingBox;
+        drawCyberUI(originX, originY, width, height, det.categories[0].categoryName);
+      });
+
+      requestAnimationFrame(predict);
+    }
+
+    init();
+  </script>
+</body>
+</html>
